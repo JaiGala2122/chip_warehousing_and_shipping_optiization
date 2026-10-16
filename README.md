@@ -1,140 +1,87 @@
 # Strategic Warehousing and Shipping
 
-**Can the current network handle these orders, and can I find a cheaper workable assignment?** That was the question behind this project.
+Supply chain optimization project to assign orders to eligible warehouses and shipping routes while respecting daily capacity. Built with Excel, Power Query, Python and HiGHS, the project produced a feasible seven-day plan for **9,215 orders**, with a modeled **$141,691.76 reduction in warehouse costs**.
 
-I used the public [Brunel dataset](https://brunel.figshare.com/articles/dataset/Supply_Chain_Logistics_Problem_Dataset/7558679), also on [Kaggle](https://www.kaggle.com/datasets/laurinbrechter/supply-chain-data). This is a portfolio case, not a client engagement.
+## Project Overview
 
-## What I did
+This project uses historical orders and current network restrictions to examine warehouse dependence, capacity limits and costs.
 
-I checked product, customer and port restrictions in Excel and Power Query, using one product and one cost example. Python then applied the workflow to all 9,215 orders and selected warehouses, routes and processing days.
+I started in Excel and Power Query to understand the data and check individual examples. Python then automated the checks across all orders. A mixed-integer linear programming model selected warehouses, shipping routes and processing days.
 
-**PLANT03 was the bottleneck.** Its 8,541 historical orders exceed its current seven-day capacity of 7,091. Even after reassignment, 7,043 orders must use it, leaving just 48 slots beyond that unavoidable workload.
+The main finding was dependence on **PLANT03**: even after considering alternatives, **7,043 orders must use this warehouse**, leaving only **48 spare order slots** over seven days.
 
-Only 1,653 orders have multiple warehouse choices. The others have a fixed warehouse, but their shipping day and route may still be choices.
+## Key Results
 
-## Result from the saved run
+- **Optimization Method**: Mixed-Integer Linear Programming (MILP), solved using HiGHS
+- **Orders Assigned**: 9,215
+- **Planning Horizon**: Seven days
+- **Daily Warehouse Capacity Violations**: Zero
+- **Historical Assignment Warehouse Cost at Current Rates**: $15,633,221.91
+- **New Plan Warehouse Cost**: $15,491,530.16
+- **Warehouse-Cost Reduction**: $141,691.76 — approximately 0.9%
+- **Plan Freight Cost**: $22,065.48
+- **Total Plan Cost**: $15,513,595.64
+- **Orders Reassigned to Another Warehouse**: 1,611
+- **Remaining Optimization Gap**: 0.0283%
+- **Final Solver Time**: 3.66 seconds, excluding data preparation
 
-| Measure | Result |
-|---|---:|
-| Orders assigned | 9,215 |
-| Historical warehouse cost | $15,633,221.91 |
-| Plan warehouse cost | $15,491,530.16 |
-| Warehouse-cost reduction | $141,691.76 — about 0.9% |
-| Orders moved from their historical warehouse | 1,611 |
-| Plan freight cost | $22,065.48 |
-| Total plan cost | $15,513,595.64 |
-| Remaining possible improvement under the model | $4,394.34 — 0.0283% |
-| Final solver time | 3.66 seconds |
+The solver retained the validated starting plan and established that any further improvement was limited to **$4,394.34 under the model**. Exact optimality was not proved.
 
-This is a checked feasible plan, not a proved exact minimum. The solver met the requested 1% gap and kept the starting plan at the same cost. Its `Optimal` status means that tolerance was met; `proven_optimal` remains `false`. Warehouse costs use the same quantity-times-rate calculation; they do not establish actual historical spending or freight savings.
+## Dataset
 
-## How I made the decisions
+- **Source**: [Brunel Supply Chain Logistics Problem Dataset](https://brunel.figshare.com/articles/dataset/Supply_Chain_Logistics_Problem_Dataset/7558679)
+- **Size**: 9,215 unique orders across seven related tables
+- **Warehouses**: 19
+- **Freight Rate Records**: 1,540
+- **Decision**: Select an eligible warehouse, shipping route and processing day for each order
+- **Objective**: Minimize modeled warehouse and freight costs while satisfying network restrictions
 
-These trees show the reasoning and checks used in the project. Branches describe the decision rules; they are not all separate experiments.
+### Tables Used
 
-### 1. Choose the problem and approach
-
-```mermaid
-flowchart TD
-    A["Check examples in Excel and Power Query"] --> B{"Does historical routing fit current seven-day capacity?"}
-    B -->|No: PLANT03 is over capacity| C["Build a capacity-aware assignment for all 9,215 orders"]
-    B -->|Yes| D["Keep a feasible baseline and assess costs"]
-    C --> E{"Does an order have another eligible warehouse?"}
-    E -->|Yes: 1,653 orders| F["Allow eligible warehouse choices"]
-    E -->|No: 7,562 orders| G["Keep its required warehouse"]
-    F --> H["Keep valid route and day choices open"]
-    G --> H
-    H --> I["Use Python and MILP for linked capacity and freight decisions"]
-    I --> J{"Can all historical freight costs be rebuilt?"}
-    D --> J
-    J -->|No: this dataset| K["Compare warehouse costs; report scenario freight separately"]
-    J -->|Yes| L["Compare total costs using the same rules"]
-```
-
-I chose MILP because whole orders must be assigned, and one order's choices affect capacity and shared freight pricing for others. Excel established the workflow; Python applied it across the full dataset.
-
-### 2. Find a usable plan and check the result
-
-```mermaid
-flowchart TD
-    A["Original search: over six hours without a complete plan"] --> B["Remove impossible or always-worse bands; calculate fixed prices once"]
-    B --> C["Build a starting schedule"]
-    C --> D{"All orders covered, routes valid, capacities and weight bands respected?"}
-    D -->|No| E["Repair and recheck; do not publish as feasible"]
-    E --> D
-    D -->|Yes| F["Save the checked starting plan"]
-    F --> G["Search with warehouse, route and day choices open"]
-    G --> H{"Requested cost gap reached?"}
-    H -->|Yes| I["Save best plan and report the remaining gap"]
-    H -->|No| J{"Search budget exhausted?"}
-    J -->|No| G
-    J -->|Yes| K["Keep best checked plan; report unfinished search"]
-```
-
-In this run, all 9,215 orders passed validation, no daily warehouse limit was exceeded, and the reported gap was 0.0283%. I did not permanently fix six days or sample the orders to get that result.
-
-## Obstacles and how I handled them
-
-| Obstacle | What I did |
+| Table | Purpose |
 |---|---|
-| **No customer feedback** | Tested capacity and routing first, without claiming poor customer service. |
-| **Historical demand, current limits** | Used seven days as a planning scenario, not evidence of historical delays. Unclear timing fields did not provide a verified delivery calendar. |
-| **Capacity and cheap options were misleading** | Counted orders, not units. Spare slots must be at eligible plants; independently choosing each order's cheapest option ignores shared capacity. |
-| **Excel became difficult to inspect** | Freight joins produced about a million rows. I loaded useful summaries, fixed the missing `Column12` step and moved automation to Python. Connection-only queries explained empty-looking sheets. |
-| **Rounded order IDs broke lookups** | Kept the original decimal IDs rather than Excel's rounded display. |
-| **Historical freight had gaps** | Carrier mismatches and missing weight bands prevented a full baseline. I did not force matches. Discontinued V44_3 appears on customer-arranged orders, where company freight is zero. |
-| **Actual shipment groups were unknown** | Modeled compatible orders sharing a route and day. Combined weight selects a band; AIR minimum charges still apply per order. |
-| **Setup and compatibility errors** | Fixed missing `pip` and a read-only-array error before trusting the run. |
-| **Six hours of solving produced no plan** | Supplied a checked starting plan, removed unreachable or always-worse bands and calculated fixed prices once. Final assignments remained free to change. |
-| **Grouping could add work or restrict savings** | Avoided listing every possible group or permanently fixing shipping days. A starting schedule helped without locking the answer. |
-| **Other projects and runs reported different costs** | Compared scope and cost rules, then kept one run's figures together. Lower published totals were not automatically comparable. |
+| `OrderList` | Historical orders, products, customers, quantities and weights |
+| `FreightRates` | Carrier routes, weight bands, rates and minimum charges |
+| `PlantPorts` | Allowed warehouse-to-port connections |
+| `ProductsPerPlant` | Products supported by each warehouse |
+| `VmiCustomers` | Customer restrictions for designated warehouses |
+| `WhCapacities` | Maximum orders processed per warehouse per day |
+| `WhCosts` | Warehouse cost per product unit |
 
-## Assumptions and limits
+## Technologies Used
 
-- All orders are available at the start. Processing and dispatch share an assigned day; there are no delay penalties.
-- Orders stay whole. Product, customer, port, service and daily capacity rules apply.
-- Warehouse cost is quantity × rate, not daily holding cost. Customer-arranged orders still incur it.
-- A lower bound is not a shipping plan; the gap is possible improvement, not achieved savings.
-- The 48-slot cushion is arithmetic. A PLANT03 capacity-loss test has not been completed.
+**Tools**: Excel, Power Query, Visual Studio Code
 
-Comparisons reviewed: [Dzalbs and Kalganova, 2020](https://arxiv.org/pdf/2001.08102) and [Khan, Tahsin and Mamun, 2026](https://link.springer.com/article/10.1007/s44257-026-00091-4). I have not reproduced either result or fully reconciled the original ant-colony benchmark.
+**Programming Language**: Python
 
-## Run the analysis
+**Libraries**:
 
-Keep `supply chain analysis.py` beside `Supply chain logisitcs problem.xlsx`. Install the dependencies, then run the script using its exact filename:
+- Data Analysis: pandas, NumPy
+- Excel File Reading: openpyxl
+- Optimization and Sparse Matrices: SciPy
+- Optimization Solver: HiGHS through highspy
 
-```bash
-python -m pip install pandas numpy openpyxl scipy highspy==1.15.1
-python "supply chain analysis.py"
-```
+**Analysis and Models Implemented**:
 
-The script creates a new timestamped folder under `shipping_results` for each run. Keep that run's files together. It saves the starting plan before the final search, which has a 300-second budget and a 1% gap target. The 3.66 seconds above measures the solver, not the entire script.
+- Historical warehouse allocation and cost analysis
+- Automated product, customer and route eligibility checks
+- Seven-day warehouse capacity feasibility model
+- Minimum PLANT03 dependence model
+- Combined warehouse, shipping-route and daily assignment model
+- Validation of order coverage, capacity usage and freight costs
 
-## Project files
+## Obstacles and Decisions
 
-Save this document as `README.md` in the GitHub project. The file guide below covers the source workbook, Excel work, Python script and all ten result files from the uploaded run.
+- **Large Excel queries**: Freight joins created about a million rows. I retained Excel examples and summaries, then automated the full workflow in Python.
+- **Incomplete historical freight coverage**: Some historical routes could not be priced with the current rate card. I compared warehouse costs and reported scenario freight separately.
+- **Long solver runtime**: The original formulation ran for over six hours without returning a complete plan. I simplified equivalent pricing calculations, removed unnecessary options and supplied a validated starting schedule.
+- **Data and setup errors**: I corrected a missing Power Query column, preserved original order IDs and resolved Python installation and array compatibility issues.
 
-| File | Purpose |
-|---|---|
-| `README.md` | Project question, decisions, results and limitations. |
-| `Supply chain logisitcs problem.xlsx` | Original seven-table dataset; retain the source values and original filename spelling. |
-| `supply chain analysis.xlsx` | Excel and Power Query work used to develop and check the workflow. |
-| `supply chain analysis.py` | Full analysis, eligibility checks, starting-plan construction, optimization and exports. |
-| `starting_plan_orders.csv` | First checked assignment: one row per order, with warehouse, route, day and costs. |
-| `starting_plan_daily_capacity.csv` | Assigned orders and remaining capacity for each warehouse and day before the final search. |
-| `starting_plan_freight_groups.csv` | Initial shipping groups, combined weights, selected rate bands and freight costs. |
-| `starting_plan_cost.json` | Initial warehouse, AIR, GROUND and total costs. |
-| `best_plan_orders.csv` | Best checked order assignment retained after the search. |
-| `best_plan_daily_capacity.csv` | Daily capacity usage for the retained plan. |
-| `best_plan_freight_groups.csv` | Shipping groups and freight charges for the retained plan. |
-| `best_plan_cost.json` | Cost totals for the retained plan. |
-| `solve_summary.json` | Solver status, time, settings, lower bound, remaining gap and exact-optimality flag. |
-| `solver.log` | Detailed search progress and solver diagnostics. |
+## Assumptions and Limitations
 
-Start with `solve_summary.json`, then inspect the three `best_plan_*.csv` files to see how the result works. Keep the `starting_plan_*` files to show what the search began with. Equal starting and final costs mean no cheaper plan was retained; the search still established a lower bound.
-
-Use the corresponding `solve_summary.json` to update the result table. Earlier chat figures and the separate solver-benchmark package describe other runs and are not inputs to this script.
-
-## Repository layout
-
-The root contains the script and both workbooks. `results/validated_run/` preserves the ten outputs reported above; newly generated runs go under `shipping_results/` and are ignored by Git. `requirements.txt` lists dependencies. The Excel workbook records the original workflow; local source paths in Power Query may need updating before refresh.
+- Seven days is a planning scenario, not a reconstruction of historical shipping dates.
+- All orders are available at the start; delivery deadlines and delay penalties are not modeled.
+- Orders remain whole, and warehouse capacity counts orders rather than units.
+- Warehouse cost equals quantity multiplied by unit cost.
+- Compatible orders can share freight pricing groups; customer-arranged freight has zero company freight cost.
+- The reported savings cover warehouse costs only. No complete historical freight savings comparison was established.
