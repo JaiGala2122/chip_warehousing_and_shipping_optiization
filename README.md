@@ -1,4 +1,4 @@
-# Strategic Warehousing and Shipping
+# Chip Warehousing and Shipping Optimization
 
 Supply chain optimization project to assign orders to eligible warehouses and shipping routes while respecting daily capacity. Built with Excel, Power Query, Python and HiGHS, the project produced a feasible seven-day plan for **9,215 orders**, with a modeled **$141,691.76 reduction in warehouse costs**.
 
